@@ -34,6 +34,9 @@ class Agent:
         epsilon: float = 1e-6,
         gamma: float = 0.99,
         tau: float = 0.005,
+        adam_epsilon: float = 1.5e-4,
+        adam_betas: tuple = (0.9, 0.999),
+        weight_decay: float = 0.0,
     ):
         self.environment_identifier = environment
         self.environment = make_environment(environment)
@@ -77,7 +80,13 @@ class Agent:
             vmin=vmin,
         ).to(self.device)
         self.target.load_state_dict(self.network.state_dict())
-        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(
+            self.network.parameters(),
+            lr=lr,
+            betas=adam_betas,
+            eps=adam_epsilon,
+            weight_decay=weight_decay,
+        )
         self.buffer = PrioritizedReplayBuffer(
             capacity=buffer_size,
             image_size=image_size,
@@ -94,6 +103,10 @@ class Agent:
     def beta(self) -> float:
         initial_beta = self.initial_beta
         return min(1.0, initial_beta + self.t * (1.0 - initial_beta) / self.timesteps)
+
+    @property
+    def learning_starts(self):
+        return self.training_starts
 
     def loop(self, verbose: bool = True):
         _episode = 0
@@ -165,6 +178,10 @@ class Agent:
 
     @torch.no_grad()
     def action(self, state: torch.Tensor):
+        # populate random actions to enrich the buffer
+        if self.t < self.training_starts:
+            return self.environment.action_space.sample()
+
         q_dist = self.network(state)
         q_values = torch.sum(q_dist * self.network.support, dim=2)
         return torch.argmax(q_values, dim=1).cpu().numpy()[0]
