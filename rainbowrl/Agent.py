@@ -1,7 +1,7 @@
 import torch
+from typing import NewType
 from .RainbowNetwork import RainbowNetwork
 from .PrioritizedReplayBuffer import PrioritizedReplayBuffer
-from typing import NewType
 
 LossValue = NewType("LossValue", float)
 
