@@ -39,6 +39,7 @@ class Agent:
         weight_decay: float = 0.0,
         record: bool = False,
         record_every: int = 50,
+        swap_frequency: int = 2000,
     ):
         self.environment_identifier = environment
         self.environment = make_environment(
@@ -59,6 +60,7 @@ class Agent:
         self.num_atoms = num_atoms
         self.batch_size = batch_size
         self.image_size = image_size
+        self.swap_frequency = swap_frequency
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -268,8 +270,5 @@ class Agent:
         return target_pmfs
 
     def update(self):
-        tau = self.tau
-        for target_param, param in zip(
-            self.target.parameters(), self.network.parameters()
-        ):
-            target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
+        if self.t % self.swap_frequency == 0:
+            self.target.load_state_dict(self.network.state_dict())
