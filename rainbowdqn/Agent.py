@@ -37,9 +37,13 @@ class Agent:
         adam_epsilon: float = 1.5e-4,
         adam_betas: tuple = (0.9, 0.999),
         weight_decay: float = 0.0,
+        record: bool = False,
+        record_every: int = 50,
     ):
         self.environment_identifier = environment
-        self.environment = make_environment(environment)
+        self.environment = make_environment(
+            environment, record=record, record_every=record_every
+        )
         self.training_starts = training_starts
         self.training_frequency = training_frequency
         self.action_dimension = self.environment.action_space.n
