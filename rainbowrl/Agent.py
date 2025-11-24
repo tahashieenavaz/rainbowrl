@@ -32,10 +32,10 @@ class Agent:
         epsilon: float = 1e-6,
         gamma: float = 0.99,
         verbose: bool = True,
+        tau: float = 0.005,
     ):
         self.environment_identifier = environment
         self.environment = make_environment(environment)
-        self.alpha = alpha
         self.training_starts = training_starts
         self.training_frequency = training_frequency
         self.action_dimension = self.environment.action_space.n
@@ -44,6 +44,8 @@ class Agent:
         self.timesteps = timesteps
         self.verbose = verbose
         self.steps = steps
+        self.alpha = alpha
+        self.tau = tau
         self.gamma = gamma
         self.vmin = vmin
         self.vmax = vmax
@@ -52,10 +54,20 @@ class Agent:
         self.image_size = image_size
 
         self.network = RainbowNetwork(
-            embedding_dimension, activation_fn, num_atoms, self.action_dimension
+            embedding_dimension=embedding_dimension,
+            activation_fn=activation_fn,
+            num_atoms=num_atoms,
+            action_dimension=self.action_dimension,
+            vmax=vmax,
+            vmin=vmin,
         )
         self.target = RainbowNetwork(
-            embedding_dimension, activation_fn, num_atoms, self.action_dimension
+            embedding_dimension=embedding_dimension,
+            activation_fn=activation_fn,
+            num_atoms=num_atoms,
+            action_dimension=self.action_dimension,
+            vmax=vmax,
+            vmin=vmin,
         )
         self.target.load_state_dict(self.network.load_state_dict())
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
@@ -99,6 +111,8 @@ class Agent:
                 loss = self.train()
                 episode_loss += loss.item()
 
+                self.tick()
+
             if self.verbose:
                 print(
                     f"episode: {_episode}, t: {self.t}, loss: {episode_loss}, hns: {hns}, reward: {episode_reward}"
@@ -138,6 +152,8 @@ class Agent:
         )
         loss.backward()
         self.optimizer.step()
+
+        self.update()
 
         return loss.item()
 
@@ -189,3 +205,10 @@ class Agent:
             target_pmfs[i].index_add_(0, u[i].long(), d_m_u[i])
 
         return target_pmfs
+
+    def update(self):
+        tau = self.tau
+        for target_param, param in zip(
+            self.target.parameters(), self.network.parameters()
+        ):
+            target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
