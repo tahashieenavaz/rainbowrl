@@ -15,7 +15,7 @@ class Agent:
     def __init__(
         self,
         environment: str,
-        lr: float = 0.00025 / 4,
+        lr: float = 0.0000625,
         training_starts: int = 80_000,
         training_frequency: int = 4,
         embedding_dimension: int = 512,
@@ -25,7 +25,7 @@ class Agent:
         vmax: float = 10.0,
         initial_beta: float = 0.4,
         timesteps: int = 10_000_000,
-        buffer_size: int = 1_000_00,
+        buffer_size: int = 100_000,
         batch_size: int = 32,
         image_size: int = 84,
         alpha: float = 0.5,
@@ -84,6 +84,7 @@ class Agent:
             vmin=vmin,
         ).to(self.device)
         self.target.load_state_dict(self.network.state_dict())
+
         self.optimizer = torch.optim.Adam(
             self.network.parameters(),
             lr=lr,
@@ -124,28 +125,26 @@ class Agent:
             done = False
             episode_reward = 0.0
             episode_loss = 0.0
+
             state, _ = self.environment.reset()
             state = process_state(state, self.image_size)
 
-            while not done:
-                if len(feeding_states) == 0:
-                    for _ in range(4):
-                        feeding_states.append(state)
+            for _ in range(4):
+                feeding_states.append(state)
 
+            while not done:
                 current_states_numpy = numpy.array(feeding_states)
                 current_states_torch = torch.from_numpy(current_states_numpy)
                 current_states_torch = current_states_torch.unsqueeze(0).to(self.device)
-
                 action = self.action(current_states_torch)
                 next_state, reward, truncated, terminated, _ = self.environment.step(
                     action
                 )
-
                 episode_reward += reward
-                next_state = process_state(next_state, self.image_size)
+                next_state_processed = process_state(next_state, self.image_size)
 
                 temporal_next_states = feeding_states.copy()
-                temporal_next_states.append(next_state)
+                temporal_next_states.append(next_state_processed)
                 temporal_next_states_numpy = numpy.array(temporal_next_states)
 
                 done = truncated or terminated
@@ -156,12 +155,10 @@ class Agent:
                     reward,
                     done,
                 )
-
                 loss = self.train()
                 episode_loss += loss
-
                 self.tick()
-                state = next_state
+                feeding_states.append(next_state_processed)
 
             feeding_states.clear()
 
@@ -182,13 +179,12 @@ class Agent:
 
     @torch.no_grad()
     def action(self, state: torch.Tensor):
-        # populate random actions to enrich the buffer
         if self.t < self.training_starts:
             return self.environment.action_space.sample()
 
         q_dist = self.network(state)
         q_values = torch.sum(q_dist * self.network.support, dim=2)
-        return torch.argmax(q_values, dim=1).cpu().numpy()[0]
+        return q_values.argmax(dim=1).item()
 
     def train(self) -> LossValue:
         if self.t < self.training_starts:
@@ -198,19 +194,17 @@ class Agent:
             return 0.0
 
         self.reset_noise()
-
-        states, actions, rewards, next_states, terminations, indices, weights = (
-            self.buffer.sample(self.batch_size, self.beta)
+        sample_result = self.buffer.sample(self.batch_size, self.beta)
+        states, actions, rewards, next_states, terminations, weights, indices = (
+            sample_result
         )
         self.optimizer.zero_grad()
         loss = self.loss(
-            states, actions, rewards, next_states, terminations, indices, weights
+            states, actions, rewards, next_states, terminations, weights, indices
         )
         loss.backward()
         self.optimizer.step()
-
         self.update()
-
         return loss.item()
 
     def loss(
@@ -219,14 +213,18 @@ class Agent:
         target_pmfs = self.get_pmfs_target(next_states, rewards, terminations)
         logits = self.network(states)
         log_probs = torch.nn.functional.log_softmax(logits, dim=2)
+
         actions = actions.view(-1, 1, 1)
         actions = actions.expand(-1, -1, self.num_atoms)
         actions = actions.long()
+
         current_log_probs = log_probs.gather(1, actions).squeeze(1)
         loss_per_sample = -(target_pmfs * current_log_probs).sum(dim=1)
+
         new_priorities = loss_per_sample.detach().cpu().numpy() + 1e-6
         self.buffer.update_priorities(indices, new_priorities)
-        return (loss_per_sample * weights.squeeze()).mean()
+
+        return (loss_per_sample * weights.view(-1)).mean()
 
     def tick(self):
         self.t += 1
@@ -239,26 +237,34 @@ class Agent:
     def get_pmfs_target(self, next_states, rewards, terminations):
         rewards = rewards.view(-1, 1)
         terminations = terminations.view(-1, 1).float()
-
         termination_mask = 1 - terminations
+
         batch_size = next_states.size(0)
         next_q_online = (self.network(next_states) * self.network.support).sum(dim=2)
         best_actions = next_q_online.argmax(dim=1)
         next_dist = self.target(next_states)[range(batch_size), best_actions]
+
         projected_atoms = (
-            rewards.view(-1, 1)
+            rewards
             + (self.gamma**self.steps)
             * self.network.support.view(1, -1)
             * termination_mask
         )
         projected_atoms = projected_atoms.clamp(self.vmin, self.vmax)
         b = (projected_atoms - self.vmin) / self.delta_z
+
         lower_idx = b.floor().long().clamp(0, self.num_atoms - 1)
-        upper_idx = b.ceil().long().clamp(0, self.num_atoms - 1)
+        upper_idx = lower_idx + 1
+
+        upper_weight = b - lower_idx.float()
+        lower_weight = 1.0 - upper_weight
+
+        upper_idx = upper_idx.clamp(0, self.num_atoms - 1)
 
         target_pmfs = torch.zeros_like(next_dist)
-        target_pmfs.scatter_add_(1, lower_idx, next_dist * (upper_idx.float() - b))
-        target_pmfs.scatter_add_(1, upper_idx, next_dist * (b - lower_idx.float()))
+        target_pmfs.scatter_add_(1, lower_idx, next_dist * lower_weight)
+        target_pmfs.scatter_add_(1, upper_idx, next_dist * upper_weight)
+
         return target_pmfs
 
     def update(self):
