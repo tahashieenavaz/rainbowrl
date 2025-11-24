@@ -69,7 +69,7 @@ class Agent:
             vmax=vmax,
             vmin=vmin,
         )
-        self.target.load_state_dict(self.network.load_state_dict())
+        self.target.load_state_dict(self.network.state_dict())
         self.optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
         self.buffer = PrioritizedReplayBuffer(
             buffer_size, image_size, steps, max_priority, alpha, epsilon
