@@ -31,7 +31,6 @@ class Agent:
         max_priority: float = 1.0,
         epsilon: float = 1e-6,
         gamma: float = 0.99,
-        verbose: bool = True,
         tau: float = 0.005,
     ):
         self.environment_identifier = environment
@@ -42,7 +41,6 @@ class Agent:
         self.delta_z = (vmax - vmin) / (num_atoms - 1)
         self.initial_beta = initial_beta
         self.timesteps = timesteps
-        self.verbose = verbose
         self.steps = steps
         self.alpha = alpha
         self.tau = tau
@@ -84,7 +82,7 @@ class Agent:
             1.0, initial_beta + self.t * (1.0 - initial_beta) / self.total_timesteps
         )
 
-    def loop(self):
+    def loop(self, verbose: bool = True):
         total_loss = []
         total_hns = []
         total_rewards = []
@@ -113,7 +111,7 @@ class Agent:
 
                 self.tick()
 
-            if self.verbose:
+            if verbose:
                 print(
                     f"episode: {_episode}, t: {self.t}, loss: {episode_loss}, hns: {hns}, reward: {episode_reward}"
                 )
