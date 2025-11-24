@@ -8,10 +8,15 @@ LossValue = NewType("LossValue", float)
 
 class Agent:
     def __init__(
-        self, environment: str, lr: float = 0.0001, training_starts: int = 80_000
+        self,
+        environment: str,
+        lr: float = 0.0001,
+        training_starts: int = 80_000,
+        training_frequency: int = 4,
     ):
         self.environment = environment
         self.training_starts = training_starts
+        self.training_frequency = training_frequency
 
         self.network = RainbowNetwork()
         self.target = RainbowNetwork()
@@ -29,6 +34,9 @@ class Agent:
 
     def train(self) -> LossValue:
         if self.t < self.training_starts:
+            return 0.0
+
+        if self.t % self.training_frequency != 0:
             return 0.0
 
         self.optimizer.zero_grad()
