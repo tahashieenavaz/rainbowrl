@@ -1,6 +1,9 @@
 import torch
 import numpy
 from .RainbowNetwork import RainbowNetwork
+from typing import NewType
+
+LossValue = NewType("LossValue", float)
 
 
 class Agent:
@@ -24,14 +27,16 @@ class Agent:
     def tick(self):
         self.t += 1
 
-    def train(self):
+    def train(self) -> LossValue:
         if self.t < self.training_starts:
-            return
+            return 0.0
 
         self.optimizer.zero_grad()
         loss = self.loss()
         loss.backward()
         self.optimizer.step()
+
+        return loss.item()
 
     def loss(self):
         pass
