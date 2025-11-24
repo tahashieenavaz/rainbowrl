@@ -218,7 +218,7 @@ class Agent:
     ):
         target_pmfs = self.get_pmfs_target(next_states, rewards, terminations)
         logits = self.network(states)
-        log_probs = F.log_softmax(logits, dim=2)
+        log_probs = torch.nn.functional.log_softmax(logits, dim=2)
         actions = actions.view(-1, 1, 1)
         actions = actions.expand(-1, -1, self.num_atoms)
         actions = actions.long()
