@@ -19,7 +19,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = ["numpy", "torch", "rltrees", "atarihns", "atarihelpers"]
+dependencies = ["numpy", "torch", "rltrees", "atarihns", "atarihelpers", "baloot"]
 keywords = ["deep reinforcement learning", "drl", "rainbow", "dqn"]
 license = { file = "LICENSE" }
 urls = { Homepage="https://github.com/tahashieenavaz/rainbowdqn", Repository="https://github.com/tahashieenavaz/rainbowdqn", Documentation="https://github.com/tahashieenavaz/rainbowdqn#readme" }

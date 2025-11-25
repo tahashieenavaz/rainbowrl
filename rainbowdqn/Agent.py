@@ -5,104 +5,91 @@ from types import SimpleNamespace
 from atarihns import calculate_hns
 from atarihelpers import process_state, make_environment
 from collections import deque
+from dataclasses import dataclass
+from baloot import acceleration_device
 from .RainbowNetwork import RainbowNetwork
 from .PrioritizedReplayBuffer import PrioritizedReplayBuffer
 
 LossValue = NewType("LossValue", float)
 
 
+@dataclass
 class Agent:
+    environment: str
+    lr: float = 0.0000625
+    training_starts: int = 80_000
+    training_frequency: int = 4
+    embedding_dimension: int = 512
+    stream_activation_function = torch.nn.GELU
+    convolution_activation_function = torch.nn.GELU
+    num_atoms: int = 51
+    vmin: float = -10.0
+    vmax: float = 10.0
+    initial_beta: float = 0.4
+    timesteps: int = 10_000_000
+    buffer_size: int = 500_000
+    batch_size: int = 32
+    image_size: int = 84
+    alpha: float = 0.5
+    steps: int = 3
+    max_priority: float = 1.0
+    epsilon: float = 1e-6
+    gamma: float = 0.99
+    adam_epsilon: float = 1.5e-4
+    adam_betas: tuple = (0.9, 0.999)
+    weight_decay: float = 0.0
+    record: bool = False
+    record_every: int = 50
+    swap_frequency: int = 2000
+
     def __init__(
         self,
-        environment: str,
-        lr: float = 0.0000625,
-        training_starts: int = 80_000,
-        training_frequency: int = 4,
-        embedding_dimension: int = 512,
-        stream_activation_function=torch.nn.GELU,
-        convolution_activation_function=torch.nn.GELU,
-        num_atoms: int = 51,
-        vmin: float = -10.0,
-        vmax: float = 10.0,
-        initial_beta: float = 0.4,
-        timesteps: int = 10_000_000,
-        buffer_size: int = 500_000,
-        batch_size: int = 32,
-        image_size: int = 84,
-        alpha: float = 0.5,
-        steps: int = 3,
-        max_priority: float = 1.0,
-        epsilon: float = 1e-6,
-        gamma: float = 0.99,
-        adam_epsilon: float = 1.5e-4,
-        adam_betas: tuple = (0.9, 0.999),
-        weight_decay: float = 0.0,
-        record: bool = False,
-        record_every: int = 50,
-        swap_frequency: int = 2000,
     ):
-        self.environment_identifier = environment
+        self.environment_identifier = self.environment
         self.environment = make_environment(
-            environment, record=record, record_every=record_every
+            self.environment_identifier,
+            record=self.record,
+            record_every=self.record_every,
         )
-        self.training_starts = training_starts
-        self.training_frequency = training_frequency
         self.action_dimension = self.environment.action_space.n
-        self.delta_z = (vmax - vmin) / (num_atoms - 1)
-        self.initial_beta = initial_beta
-        self.timesteps = timesteps
-        self.steps = steps
-        self.alpha = alpha
-        self.gamma = gamma
-        self.vmin = vmin
-        self.vmax = vmax
-        self.num_atoms = num_atoms
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.swap_frequency = swap_frequency
-
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        elif torch.mps.is_available():
-            self.device = torch.device("mps")
-        else:
-            self.device = torch.device("cpu")
+        self.delta_z = (self.vmax - self.vmin) / (self.num_atoms - 1)
+        self.device = acceleration_device()
 
         self.network = RainbowNetwork(
-            embedding_dimension=embedding_dimension,
-            stream_activation_function=stream_activation_function,
-            convolution_activation_function=convolution_activation_function,
-            num_atoms=num_atoms,
+            embedding_dimension=self.embedding_dimension,
+            stream_activation_function=self.stream_activation_function,
+            convolution_activation_function=self.convolution_activation_function,
+            num_atoms=self.num_atoms,
             action_dimension=self.action_dimension,
-            vmax=vmax,
-            vmin=vmin,
+            vmax=self.vmax,
+            vmin=self.vmin,
         ).to(self.device)
         self.target = RainbowNetwork(
-            embedding_dimension=embedding_dimension,
-            stream_activation_function=stream_activation_function,
-            convolution_activation_function=convolution_activation_function,
-            num_atoms=num_atoms,
+            embedding_dimension=self.embedding_dimension,
+            stream_activation_function=self.stream_activation_function,
+            convolution_activation_function=self.convolution_activation_function,
+            num_atoms=self.num_atoms,
             action_dimension=self.action_dimension,
-            vmax=vmax,
-            vmin=vmin,
+            vmax=self.vmax,
+            vmin=self.vmin,
         ).to(self.device)
         self.target.load_state_dict(self.network.state_dict())
 
         self.optimizer = torch.optim.Adam(
             self.network.parameters(),
-            lr=lr,
-            betas=adam_betas,
-            eps=adam_epsilon,
-            weight_decay=weight_decay,
+            lr=self.lr,
+            betas=self.adam_betas,
+            eps=self.adam_epsilon,
+            weight_decay=self.weight_decay,
         )
         self.buffer = PrioritizedReplayBuffer(
-            capacity=buffer_size,
-            image_size=image_size,
-            steps=steps,
-            max_priority=max_priority,
-            alpha=alpha,
-            epsilon=epsilon,
-            gamma=gamma,
+            capacity=self.buffer_size,
+            image_size=self.image_size,
+            steps=self.steps,
+            max_priority=self.max_priority,
+            alpha=self.alpha,
+            epsilon=self.epsilon,
+            gamma=self.gamma,
             device=self.device,
         )
         self.t = 0
