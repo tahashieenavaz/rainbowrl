@@ -1,6 +1,6 @@
-from rainbowdqn import Agent
+from rainbowdqn import Agent as RainbowAgent
 
-agent = Agent(environment="ALE/Pong-v5")
+agent = RainbowAgent(environment="ALE/Pong-v5")
 data = agent.loop(verbose=True)
 
 print(data.loss, data.hns, data.rewards)
