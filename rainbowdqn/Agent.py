@@ -6,7 +6,7 @@ from atarihns import calculate_hns
 from atarihelpers import process_state, make_environment
 from collections import deque
 from dataclasses import dataclass
-from baloot import acceleration_device
+from baloot import acceleration_device, full_seed
 from .RainbowNetwork import RainbowNetwork
 from .PrioritizedReplayBuffer import PrioritizedReplayBuffer
 
@@ -41,7 +41,7 @@ class Agent:
     record_every: int = 50
     swap_frequency: int = 2000
 
-    def __init__(self, environment: str):
+    def __init__(self, environment: str, seed: int | None = None):
         self.environment_identifier = environment
         self.environment = make_environment(
             self.environment_identifier,
@@ -49,6 +49,14 @@ class Agent:
             record_every=self.record_every,
         )
         self.action_dimension = self.environment.action_space.n
+        self.seed = seed
+
+        # seed the agent if provided
+        if seed is not None:
+            full_seed(seed)
+            self.environment.action_space.seed(seed)
+            self.environment.observation_space.seed(seed)
+
         self.delta_z = (self.vmax - self.vmin) / (self.num_atoms - 1)
         self.device = acceleration_device()
 
@@ -113,7 +121,11 @@ class Agent:
             episode_reward = 0.0
             episode_loss = 0.0
 
-            state, _ = self.environment.reset()
+            if self.seed:
+                state, _ = self.environment.reset(seed=seed)
+            else:
+                state, _ = self.environment.reset()
+
             state = process_state(state, self.image_size)
 
             for _ in range(4):
