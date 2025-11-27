@@ -1,5 +1,6 @@
 import torch
 import numpy
+import time
 from typing import NewType
 from types import SimpleNamespace
 from atarihns import calculate_hns
@@ -115,6 +116,8 @@ class Agent:
         total_rewards = []
         feeding_states = deque(maxlen=4)
 
+        starting_time = time.time()
+
         while self.t < self.timesteps:
             _episode += 1
             done = False
@@ -122,7 +125,7 @@ class Agent:
             episode_loss = 0.0
 
             if self.seed:
-                state, _ = self.environment.reset(seed=seed)
+                state, _ = self.environment.reset(seed=self.seed)
             else:
                 state, _ = self.environment.reset()
 
@@ -172,9 +175,15 @@ class Agent:
                     f"episode: {_episode}, t: {self.t}, loss: {episode_loss}, hns: {hns}, reward: {episode_reward}, beta: {self.beta}",
                     flush=True,
                 )
-
+        duration = time.time() - starting_time
+        duration_hours = duration / 3600
         return SimpleNamespace(
-            **{"loss": total_loss, "hns": total_hns, "rewards": total_rewards}
+            **{
+                "loss": total_loss,
+                "hns": total_hns,
+                "rewards": total_rewards,
+                "duration": duration_hours,
+            }
         )
 
     @torch.no_grad()
